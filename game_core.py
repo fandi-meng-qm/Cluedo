@@ -44,6 +44,7 @@ class GameState:
         if curr_player != player:
             # print(action & self.cards_dice[curr_player])
             show_card = random_choose(action & self.cards_dice[curr_player])
+            print('player'+str(curr_player)+'show card'+str(show_card)+' to '+ str(player))
             self.information_state[player][show_card][curr_player] = 1
         else:
             new_answer = action - (action & self.cards_dice[curr_player])
@@ -62,6 +63,7 @@ class GameState:
             pass
 
     def accuse(self, player, action):
+        print('player'+str(player)+'accuse'+str(action))
         self.accusation[player] = set(action)
 
 
@@ -92,7 +94,7 @@ class GameModel:
                 information_state[i][j] = [0] * (n_players + 1)
                 if j in cards_dice[i]:
                     information_state[i][j][i] = 1
-
+        # initial state
         self.state = GameState(n_players=n_players, players=list(range(1, n_players + 1)),
                                cards_dice=cards_dice, cards=set(list(range(21))) - cards_left, accusation=accusation,
                                information_state=information_state, step=0)
