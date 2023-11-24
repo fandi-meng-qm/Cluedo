@@ -11,4 +11,4 @@ def win_rate(n_player, n):
     return [a/n for a in win_list]
 
 
-win_rate(3, 20)
+win_rate(3, 10000)

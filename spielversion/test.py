@@ -1,13 +1,39 @@
 import random
+from open_spiel.python.algorithms import cfr
+import itertools as it
+from cluedo_game import CluedoGame,CluedoParams
+from matplotlib import pyplot as plt
+from open_spiel.python.algorithms import external_sampling_mccfr as external_mccfr
+from pyspiel import TabularPolicy, State, PlayerId, Game
+from open_spiel.python.algorithms import exploitability
 
 
-def chance_outcome(n_players, cards_dice=None):
-    if cards_dice is None:
-        cards_dice = {}
-    cards_dice[0] = {random.randint(0, 5), random.randint(6, 11), random.randint(12, 20)}
-    cards_left = set(list(range(21))) - cards_dice[0]
-    for i in range(1, n_players + 1):
-        cards_dice[i] = set(random.sample(cards_left, 3))
-        cards_left -= cards_dice[i]
-    # print(cards_dice,cards_left)
-    return cards_dice, cards_left
+def print_policy(policy: TabularPolicy) -> None:
+    for state, probs in zip(it.chain(*policy.states_per_player),
+                            policy.action_probability_array):
+        print(f'{state:6}   p={probs}')
+
+
+eval_steps = []
+eval_nash_conv = []
+
+
+def get_mccfr_policy(game: CluedoGame, n: int):
+    cfr_solver = external_mccfr.ExternalSamplingSolver(
+        game, external_mccfr.AverageType.SIMPLE)
+    for i in range(n):
+        cfr_solver.iteration()
+        average_policy = cfr_solver.average_policy()
+        if i & (i - 1) == 0:
+            conv = exploitability.nash_conv(game, cfr_solver.average_policy())
+            eval_steps.append(i)
+            print("Iteration {} exploitability {}".format(i, conv))
+    print_policy(average_policy)
+    return average_policy
+
+
+params = CluedoParams(2)
+game = CluedoGame(game_params=params)
+
+if __name__ == '__main__':
+    get_mccfr_policy(game, 1)

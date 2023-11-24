@@ -75,6 +75,7 @@ def gpt_agent(state):
     please only tell me the suggestion action without any other information
     ''
     """
+
     response = get_completion(prompt)
     print(response)
     action = string_to_number(response)

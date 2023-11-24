@@ -12,189 +12,252 @@ import numpy as np
 
 import enum
 
+# SUGGESTION_ACTION = 0
+# BID_ACTION_OFFSET = 1
+
+class CluedoParams:
+    def __init__(self, n_players):
+        self.n_players = n_players
+
 _MAX_NUM_PLAYERS = 6
-_MIN_NUM_PLAYERS = 3
+_MIN_NUM_PLAYERS = 2
 _GAME_TYPE = pyspiel.GameType(
     short_name="python_cluedo",
-    long_name="Python cluedo",
+    long_name="Python Cluedo",
     dynamics=pyspiel.GameType.Dynamics.SEQUENTIAL,
     chance_mode=pyspiel.GameType.ChanceMode.EXPLICIT_STOCHASTIC,
     information=pyspiel.GameType.Information.IMPERFECT_INFORMATION,
-    utility=pyspiel.GameType.Utility,
+    utility=pyspiel.GameType.Utility.ZERO_SUM,
     reward_model=pyspiel.GameType.RewardModel.TERMINAL,
     max_num_players=_MAX_NUM_PLAYERS,
     min_num_players=_MIN_NUM_PLAYERS,
     provides_information_state_string=True,
     provides_information_state_tensor=True,
-    provides_observation_string=True,
-    provides_observation_tensor=False,
-    provides_factored_observation_string=False)
-
+    provides_observation_string=False,
+    provides_observation_tensor=True)
 
 class CluedoGame(pyspiel.Game):
-    def __init__(self, n_players) -> None:
-        game_params = n_players
+    def __init__(self, params=None, game_params: CluedoParams = None) -> None:
+        game_params = game_params or CluedoParams()
         self.game_params = game_params
-        n_actions = math.comb(n_players * 3 + 3, 3)
+        n=self.game_params.n_players
+        n_actions = 6*6*9
         game_info = pyspiel.GameInfo(
             num_distinct_actions=n_actions,
-            max_chance_outcomes=math.comb(game_params.m_grid * game_params.n_grid, game_params.n_people) *
-                                game_params.n_people,
-            num_players=n_players,
-            min_utility=0,
-            max_utility=1,
-            utility_sum=1.0,
+            max_chance_outcomes=math.comb(n* 3, 3),
+            num_players=n,
+            min_utility=-1,
+            max_utility=n-1,
+            utility_sum=0.0,
             max_game_length=1000
         )
-        super().__init__(_GAME_TYPE, game_info, n_players or dict())
+        super().__init__(_GAME_TYPE, game_info, params or dict())
 
     def new_initial_state(self, game_params=None) -> CluedoState:
         """Returns a state corresponding to the start of a game."""
         return CluedoState(self, self.game_params)
 
-def get_cards(n_players):
+    def make_py_observer(self, iig_obs_type=None, params=None):
+        """Returns an object used for observing game state."""
+        return CluedoObserver(
+            iig_obs_type or pyspiel.IIGObservationType(perfect_recall=False),
+            self.game_params)
 
-
-def get_init_states(n_players):
-
-
-
-
+def random_choose(cards):
+    card = random.sample(cards, 1)[0]
+    return card
 
 class CluedoState(pyspiel.State):
     """A python version of the state."""
 
-    def __init__(self, game, n_players):
+    def __init__(self, game, params: CluedoParams = None):
         """Constructor; should only be called by Game.new_initial_state."""
         super().__init__(game)
-        self.params = n_players
-        self.players = list(range(n_players))
+        self.params = params
+        self.players = list(range(self.params.n_players))
         self.cards = set()
         self.cards_dice = dict()
-        self.accusation = dict()
         self.information_state = dict()
-        self.step = 0
-        self.player = int
+        for i in range(self.params.n_players+1):
+            self.information_state[i] = np.zeros((21,self.params.n_players+1))
+        self.accusation = dict()
+        self.dice_step = 0
+        self.suggestion_step = 0
+        self._curr_player = random.choice(list(range(self.params.n_players)))
+        self._winner = -1
+        self._loser = -1
+        self.suspects = {0, 1, 2, 3, 4, 5}
+        self.weapons = {6, 7, 8, 9, 10, 11}
+        self.rooms = {12, 13, 14, 15, 16, 17, 18, 19, 20}
+        self.init_actions = [set(item) for item in list(itertools.product(self.suspects, self.weapons, self.rooms))]
+        self.history = list()
+
 
     def current_player(self):
         """Returns id of the next player to move, or TERMINAL if game is over."""
         if self.is_terminal():
             return pyspiel.PlayerId.TERMINAL
-        # in the current version only the first move is a chance move - the one which decides who is the killer
-        elif self.step == 0:
+        elif self.dice_step < self.params.n_players+1:
             return pyspiel.PlayerId.CHANCE
-        elif self.step == 1:
-            self.player = random.choice(self.players)
-            return self.player
         else:
-            self.player = self.next_play(self.player)
-            return self.player
+            return self._curr_player
 
-    def next_player(self, player) ->int:
-        if player + 1 > self.n_players:
-            next_player = (player + 1) % self.n_players
-        else:
-            next_player = player + 1
-        return next_player
+    def winner(self):
+        """Returns the id of the winner if the bid originator has won.
+            -1 otherwise.
+            """
+        return self._winner
+
+    # def loser(self):
+    #     """Returns the id of the loser if the bid originator has lost.
+    #     -1 otherwise.
+    #     """
+    #     return self._loser
 
     def _legal_actions(self, player) -> List[set] or None:
         """Returns a list of legal actions"""
         # check this is not the chance player, for some reason that is handled separately
         assert player >= 0
-
-        set1=self.cards & {0, 1, 2, 3, 4, 5}
-        set2=self.cards&{6,7,8,9,10,11}
-        set3=self.cards&{12,13,14,15,16,17,18,19,20}
-        actions = [set(item) for item in list(itertools.product(set1,set2,set3))]
-
+        self.suspects = {0, 1, 2, 3, 4, 5}&self.cards
+        self.weapons = {6, 7, 8, 9, 10, 11}&self.cards
+        self.rooms = {12, 13, 14, 15, 16, 17, 18, 19, 20}&self.cards
+        actions_sets= [set(item) for item in list(itertools.product(self.suspects, self.weapons, self.rooms))]
+        actions = []
+        for i in range(len(self.init_actions)):
+            if self.init_actions[i] in actions_sets:
+                actions.append(i)
         # print(actions)
         return actions
 
-    def is_chance_node(self):
-        if self.step == 0:
-            return True
-
-
-
-
     def chance_outcomes(self):
-        assert self.step == 0
-        initial_states = get_init_states(self.params)
-        chance_outcomes = [(i, 1 / len(initial_states)) for i in range(len(initial_states))]
-        return chance_outcomes
+        assert self.is_chance_node()
+        if self.dice_step == 0:
+            num_possibilities = len(self.suspects)*len(self.weapons)*len(self.rooms)
+            probability = 1.0 / num_possibilities
+            chance_outcomes = [(i, probability) for i in range(num_possibilities)]
+            return chance_outcomes
+        else:
+            num_possibilities = math.comb(self.params.n_players * 3+3-3*self.dice_step, 3)
+            probability = 1.0 / num_possibilities
+            chance_outcomes = [(i, probability) for i in range(num_possibilities)]
+            return chance_outcomes
 
-    def _kill_action(self, victim: Person) -> None:
-        assert self.current_player() == MurderPlayer.KILLER
-        self.alive.remove(victim)
-        self.dead.append(victim)
-        self.points -= self.cost_list[self.people.index(victim)]
+    def next_player(self, player) ->int:
+        if player + 1 >= self.params.n_players:
+            next_player = 0
+        else:
+            next_player = player + 1
+        return next_player
 
-    def _accuse_action(self, suspect: Person) -> None:
-        assert self.current_player() == MurderPlayer.DETECTIVE
-        self.accused.append(suspect)
+    def suggest(self, player, action):
+        curr_player = self.next_player(player)
+        action_set = self.init_actions[action]
+        while action_set & self.cards_dice[curr_player] == set():
+            if curr_player == player:
+                self.history.append([player, {action_set}, -1,{}])
+                for i in action_set:
+                    self.information_state[curr_player][i][self.params.n_players] = 1
+                break
+            curr_player = self.next_player(curr_player)
+
+        if curr_player != player:
+            # print(action & self.cards_dice[curr_player])
+            show_card = random_choose(action_set & self.cards_dice[curr_player])
+            self.history.append([player, {action_set}, curr_player, {show_card}])
+            # print('player'+str(curr_player)+'show card'+str(show_card)+' to '+ str(player))
+            self.information_state[player][show_card][curr_player] = 1
+        else:
+            self.history.append([player, {action_set}, -1, {}])
+            new_answer = action_set - (action_set & self.cards_dice[curr_player])
+            if new_answer != {}:
+                for i in new_answer:
+                    self.information_state[player][i][self.params.n_players] = 1
+
+    def if_accuse(self, player):
+        answer = []
+        for i in range(21):
+            if self.information_state[player][i][self.params.n_players] == 1:
+                answer.append(i)
+        if len(answer) == 3:
+            self.accuse(player, answer)
+        else:
+            pass
+
+    def accuse(self, player, action):
+        # print('player'+str(player)+'accuse'+str(action))
+        self.accusation[player] = set(action)
+        self._winner = player
 
     def _apply_action(self, action: int) -> None:
+
         if self.is_chance_node():
-            assert self.step == 0
-            initial_states = get_init_states(self.params)
-            state = initial_states[action]
-            self.people = state.people
-            self.alive = state.alive
-            self.dead = state.dead
-            self.accused = state.accused
-            self.killer = state.killer
-            self.cost_list = state.cost_list
-            self.points = math.ceil(sum(self.cost_list) / 2) + 3
-            self.step = 1
-
-        else:
-            if self.current_player() == MurderPlayer.KILLER:
-                if action is None:
-                    pass
-                else:
-                    self._kill_action(self.people[action])
+            if self.dice_step == 0:
+                self.cards_dice[self.params.n_players] = self.init_actions[action]
+                self.cards = self.cards|self.init_actions[action]
+                for card in self.cards_dice[self.params.n_players]:
+                    self.information_state[self.params.n_players][card][self.params.n_players] = 1
             else:
-                self._accuse_action(self.people[action])
-            self.step += 1
-
-    def n_actions(self) -> int:
-        if self.step == 0:
-            return len(get_init_states(self.params))
+                cards_left = set(range(21)) - self.cards
+                combinations = itertools.combinations(cards_left, 3)
+                dice_options = []
+                for combo in combinations:
+                    dice_options.append(set(combo))
+                self.cards_dice[self.dice_step-1] = dice_options[action]
+                self.cards = self.cards|dice_options[action]
+                for card in self.cards_dice[self.dice_step-1]:
+                    self.information_state[self.params.n_players][card][self.dice_step-1] = 1
+            self.dice_step += 1
         else:
-            return len(self._legal_actions(self.current_player()))
+            self.suggest(self._curr_player, action)
+            self.suggestion_step += 1
+            self.if_accuse(self._curr_player)
+            self._curr_player = self.next_player(self._curr_player)
+
 
     def clone(self):
         cp = super().clone()
         return cp
 
     def is_terminal(self):
-        if self.step > 0:
-            people, victims, points, cost_list = KillerInterface.get_actions(ObservationForKiller.from_game_state(self))
-            if victims is None or victims == []:
-                return True
-            elif self.killer in set(self.accused):
-                return True
-            else:
-                return False
-        else:
-            return False
+        """Returns True if the game is over."""
+        return self._winner >= 0
 
-    def score(self) -> float:
-        if not self.is_terminal():
-            return 0
-        else:
-            return len(self.alive) / len(self.people)
 
     def returns(self):
         """Total reward for each player over the course of the game so far."""
         if not self.is_terminal():
-            return [0, 0]
+            return [0]*self.params.n_players
         else:
-            score = self.score()
-            return [-score, score]
+            score = [-1]*self.params.n_players
+            score[self._winner] = self.params.n_players-1
+            return score
 
     def __str__(self):
         """String for debug purposes. No particular semantics are required."""
-        return f"m_grid={self.params.m_grid},n_grid={self.params.n_grid},n_people={self.params.n_people}," \
-               f"people={self.people},alive={self.alive},accused={self.accused},killer={self.killer}," \
-               f"cost_list={self.cost_list},points={self.points},step={self.step}"
+        return f"card_dice={self.cards_dice}, player={self._curr_player}," \
+               f"information_state={self.information_state[self._curr_player]}"
+
+
+class CluedoObserver:
+    """Observer, conforming to the PyObserver interface (see observation.py)."""
+
+    def __init__(self, iig, params):
+        """Initializes an empty observation tensor."""
+        if params == None:
+            raise ValueError(f"Observation needs params for setup; passed {params}")
+        self.params = params
+        size = 21*(params.n_players+1)
+        shape = (21, params.n_players+1)
+        self.tensor = np.zeros(size, np.float32)
+        self.dict = {"observation": np.reshape(self.tensor, shape)}
+
+    def set_from(self, state: CluedoState, player: int):
+        """Updates `tensor` and `dict` to reflect `state` from PoV of `player`."""
+        self.dict["observation"] = state.information_state[state._curr_player]
+
+    def string_from(self, state: CluedoState, player: int):
+        """Observation of `state` from the PoV of `player`, as a string."""
+        return f"information_state{state.information_state}"
+
+
+pyspiel.register_game(_GAME_TYPE, CluedoGame)
