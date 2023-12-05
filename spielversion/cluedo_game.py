@@ -83,7 +83,7 @@ class CluedoState(pyspiel.State):
         self.accusation = dict()
         self.dice_step = 0
         self.suggestion_step = 0
-        self._curr_player = random.choice(list(range(self.params.n_players)))
+        self._curr_player = 0
         self._winner = -1
         self._loser = -1
         self.suspects = {0, 1, 2, 3, 4, 5}
@@ -154,7 +154,7 @@ class CluedoState(pyspiel.State):
         action_set = self.init_actions[action]
         while action_set & self.cards_dice[curr_player] == set():
             if curr_player == player:
-                self.history.append([player, {action_set}, -1,{}])
+                self.history.append([player, action, action_set, -1, 0])
                 for i in action_set:
                     self.information_state[curr_player][i][self.params.n_players] = 1
                 break
@@ -163,11 +163,11 @@ class CluedoState(pyspiel.State):
         if curr_player != player:
             # print(action & self.cards_dice[curr_player])
             show_card = random_choose(action_set & self.cards_dice[curr_player])
-            self.history.append([player, {action_set}, curr_player, {show_card}])
+            self.history.append([player, action, action_set, curr_player, 1])
             # print('player'+str(curr_player)+'show card'+str(show_card)+' to '+ str(player))
             self.information_state[player][show_card][curr_player] = 1
         else:
-            self.history.append([player, {action_set}, -1, {}])
+            self.history.append([player, action, action_set, -1, 0])
             new_answer = action_set - (action_set & self.cards_dice[curr_player])
             if new_answer != {}:
                 for i in new_answer:
@@ -206,6 +206,7 @@ class CluedoState(pyspiel.State):
                 self.cards = self.cards|dice_options[action]
                 for card in self.cards_dice[self.dice_step-1]:
                     self.information_state[self.params.n_players][card][self.dice_step-1] = 1
+                    self.information_state[self.dice_step-1][card][self.dice_step-1] = 1
             self.dice_step += 1
         else:
             self.suggest(self._curr_player, action)
@@ -235,7 +236,8 @@ class CluedoState(pyspiel.State):
     def __str__(self):
         """String for debug purposes. No particular semantics are required."""
         return f"card_dice={self.cards_dice}, player={self._curr_player}," \
-               f"information_state={self.information_state[self._curr_player]}"
+               f"information_state={self.information_state[self._curr_player]}\"" \
+               f"public_history={self.history}"
 
 
 class CluedoObserver:
@@ -257,7 +259,7 @@ class CluedoObserver:
 
     def string_from(self, state: CluedoState, player: int):
         """Observation of `state` from the PoV of `player`, as a string."""
-        return f"information_state{state.information_state}"
+        return f"information_state{state.information_state[state._curr_player]}"
 
 
 pyspiel.register_game(_GAME_TYPE, CluedoGame)

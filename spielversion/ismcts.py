@@ -19,6 +19,8 @@ https://ieeexplore.ieee.org/document/6203567
 
 import copy
 import enum
+import random
+
 import numpy as np
 import pyspiel
 
@@ -103,6 +105,8 @@ class ISMCTSBot(pyspiel.Bot):
   def get_state_key(self, state):
     if self._use_observation_string:
       return state.current_player(), state.observation_string()
+    elif state.is_terminal():
+      return None
     else:
       return state.current_player(), state.information_state_string()
 
@@ -126,6 +130,7 @@ class ISMCTSBot(pyspiel.Bot):
     for _ in range(self._max_simulations):
       # how to sample a pyspiel.state from another pyspiel.state?
       sampled_root_state = self.sample_root_state(state)
+      # print(self.get_state_key(sampled_root_state))
       assert root_infostate_key == self.get_state_key(sampled_root_state)
       assert sampled_root_state
       self.run_simulation(sampled_root_state)
@@ -204,30 +209,66 @@ class ISMCTSBot(pyspiel.Bot):
       raise pyspiel.SpielError(
           'Case not handled (badly set max_world_samples..?)')
 
+  def initstate_from_infostate(self,state):
+    init_state = state.clone()
+    init_state._curr_player = 0
+    init_state.cards_dice = dict()
+    init_state.suggestion_step = 0
+    init_state.history = list()
+    for i in range(state.params.n_players+1):
+      init_state.information_state[i] = np.zeros((21, state.params.n_players + 1))
+    cards_left = state.cards
+    for i in range(state.params.n_players+1):
+      init_state.cards_dice[i]=set()
+      for card in range(21):
+        if state.information_state[state._curr_player][card][i]==1:
+          init_state.cards_dice[i].add(card)
+          cards_left = cards_left - {card}
+    if init_state.cards_dice[state.params.n_players]&{0,1,2,3,4,5} is set():
+      init_state.cards_dice[state.params.n_players].add(random.sample(cards_left & {0, 1, 2, 3, 4, 5}, 1)[0])
+    if init_state.cards_dice[state.params.n_players]&{6,7,8,9,10,11} is set():
+      init_state.cards_dice[state.params.n_players].add(random.sample(cards_left & {6, 7, 8, 9, 10, 11}, 1)[0])
+    if init_state.cards_dice[state.params.n_players]&{12,13,14,15,16,17,18,19,20} is set():
+      init_state.cards_dice[state.params.n_players].add(random.sample(cards_left & {12, 13, 14, 15, 16, 17, 18, 19, 20}, 1)[0])
+    cards_left = cards_left - (init_state.cards_dice[state.params.n_players]&cards_left)
+    for i in state.players:
+      if len(init_state.cards_dice[i])<3:
+        init_state.cards_dice[i]=init_state.cards_dice[i]|set(random.sample(cards_left, 3 - len(init_state.cards_dice[i])))
+        cards_left = cards_left - (init_state.cards_dice[i] & cards_left)
+
+    for i in range(state.params.n_players+1):
+      for card in init_state.cards_dice[i]:
+        init_state.information_state[i][card][i] = 1
+        init_state.information_state[state.params.n_players][card][i] = 1
+    return init_state,state
+
+  def from_init_to_sample(self,state):
+    init_state,state = self.initstate_from_infostate(state)
+    if len(state.history) != 0:
+      action_list = []
+      for i in state.history:
+        action_list.append(i[1])
+      for i in range(len(action_list)):
+        if not init_state.is_terminal() and state.suggestion_step != init_state.suggestion_step:
+          init_state = init_state.child(action_list[i])
+          if init_state.history[i] != state.history[i] or \
+          init_state.is_terminal() != state.is_terminal():
+            init_state = self.from_init_to_sample(state)
+      if not np.array_equal(init_state.information_state[init_state._curr_player],
+                                     state.information_state[state._curr_player]):
+        init_state = self.from_init_to_sample(state)
+
+    return init_state
+
   # For cluedo, this part is important, because the memory is meaningful
   def resample_from_infostate(self, state):
     if self._resampler_cb:
       return self._resampler_cb(state, state.current_player())
     else:
-      resample_state = state.clone()
-      player = resample_state.current_player()
-      for i in range(resample_state.params.n_players+1):
-        if i != player:
-          resample_state.cards_dice[i] = {}
-          resample_state.information_state[i] = np.zeros((21,resample_state.params.n_players+1))
-      indices = np.argwhere(resample_state.information_state[player] == 1)
-      for i in range(indices.shape[0]):
-        if indices[i][1]
-      possible_cards = resample_state.cards - resample_state.cards_dice[resample_state.current_player()]
-      for i in resample_state.history:
-        if i[0] != resample_state.current_player():
-          impossible_cards=[]
-          for i in range(indices.shape[0]):
-            if indices[i][1]
+      sample_state = state.clone()
+      resample_state = self.from_init_to_sample(sample_state)
+      return resample_state
 
-
-
-      return
 
   def create_new_node(self, state):
     infostate_key = self.get_state_key(state)

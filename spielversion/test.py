@@ -1,4 +1,4 @@
-import random
+import random_agent
 from open_spiel.python.algorithms import cfr
 import itertools as it
 from cluedo_game import CluedoGame,CluedoParams
