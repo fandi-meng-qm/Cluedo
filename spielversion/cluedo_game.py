@@ -91,6 +91,7 @@ class CluedoState(pyspiel.State):
         self.rooms = {12, 13, 14, 15, 16, 17, 18, 19, 20}
         self.init_actions = [set(item) for item in list(itertools.product(self.suspects, self.weapons, self.rooms))]
         self.history = list()
+        self.entropy = float()
 
 
     def current_player(self):
@@ -101,6 +102,28 @@ class CluedoState(pyspiel.State):
             return pyspiel.PlayerId.CHANCE
         else:
             return self._curr_player
+
+    def get_state_entropy(self):
+        unknown_cards = copy.deepcopy(self.cards)
+        for i in range(self.params.n_players):
+            for card in range(21):
+                if self.information_state[self._curr_player][card][i] == 1:
+                    unknown_cards.remove(card)
+        if np.sum(self.information_state[self._curr_player][0:6,self.params.n_players]) == 1:
+            suspect_entropy = 0
+        else:
+            suspect_entropy = math.log2(len(unknown_cards & self.suspects))
+        if np.sum(self.information_state[self._curr_player][6:12,self.params.n_players]) == 1:
+            weapon_entropy = 0
+        else:
+            weapon_entropy = math.log2(len(unknown_cards & self.weapons))
+        if np.sum(self.information_state[self._curr_player][12:21,self.params.n_players]) == 1:
+            room_entropy = 0
+        else:
+            room_entropy = math.log2(len(unknown_cards & self.rooms))
+
+        self.entropy = -suspect_entropy - weapon_entropy - room_entropy
+
 
     def winner(self):
         """Returns the id of the winner if the bid originator has won.

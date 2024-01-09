@@ -1,6 +1,6 @@
 from collections import defaultdict
 import random
-from game_core import GameModel
+from init_version.game_core import GameModel
 import numpy as np
 
 def random_policy(cards):

@@ -45,13 +45,14 @@ class ChildSelectionPolicy(enum.Enum):
 class ChildInfo(object):
   """Child node information for the search tree."""
 
-  def __init__(self, visits, return_sum, prior):
+  def __init__(self, visits, return_sum, prior, entropy):
     self.visits = visits
     self.return_sum = return_sum
     self.prior = prior
+    self.entropy = entropy
 
   def value(self):
-    return self.return_sum / self.visits
+    return self.return_sum / self.visits + self.entropy
 
 
 class ISMCTSNode(object):
@@ -301,7 +302,7 @@ class ISMCTSBot(pyspiel.Bot):
 
   def expand_if_necessary(self, node, action):
     if action not in node.child_info:
-      node.child_info[action] = ChildInfo(0.0, 0.0, node.prior_map[action])
+      node.child_info[action] = ChildInfo(0.0, 0.0, node.prior_map[action], 0.0)
 
   def select_action_tree_policy(self, node, legal_actions):
     if self._allow_inconsistent_action_sets:
@@ -389,4 +390,7 @@ class ISMCTSBot(pyspiel.Bot):
       state.apply_action(chosen_action)
       returns = self.run_simulation(state)
       node.child_info[chosen_action].return_sum += returns[cur_player]
+
+      node.child_info[chosen_action].entropy = state.entropy
+
       return returns

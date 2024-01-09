@@ -1,7 +1,7 @@
-from game_core import *
+from init_version.game_core import *
 import random
 from random_agent import random_policy
-from gpt_agent import gpt_agent
+
 
 # def game_run(model):
 #     state = model.state

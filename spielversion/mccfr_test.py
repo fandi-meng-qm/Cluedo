@@ -1,10 +1,7 @@
-import random_agent
-from open_spiel.python.algorithms import cfr
 import itertools as it
 from cluedo_game import CluedoGame,CluedoParams
-from matplotlib import pyplot as plt
 from open_spiel.python.algorithms import external_sampling_mccfr as external_mccfr
-from pyspiel import TabularPolicy, State, PlayerId, Game
+from pyspiel import TabularPolicy
 from open_spiel.python.algorithms import exploitability
 
 

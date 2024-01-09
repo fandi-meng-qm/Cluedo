@@ -1,6 +1,7 @@
 import random
 import re
 from open_spiel.python import rl_environment
+import ismcts_entropy
 import ismcts
 from open_spiel.python.algorithms import mcts
 from cluedo_game import CluedoGame, CluedoParams
@@ -88,7 +89,13 @@ def test(n):
     # Create the MCTS bot. Both agents can share the same bot in this case since
     # there is no state kept between searches. See mcts.py for more info about
     # the arguments.
-    ismcts_bot = ismcts.ISMCTSBot(
+    ismcts_bot = ismcts_entropy.ISMCTSBot(
+        game=env.game,
+        uct_c=5,
+        max_simulations=n,
+        evaluator=mcts.RandomRolloutEvaluator())
+
+    ismcts_bot2 = ismcts.ISMCTSBot(
         game=env.game,
         uct_c=5,
         max_simulations=n,
@@ -97,12 +104,15 @@ def test(n):
     agents = [
         MCTSAgent(
             player_id=0, num_actions=num_actions, mcts_bot=ismcts_bot),
-        RandomAgent(
-        player_id=1, num_actions=num_actions, bot=None),
-
-        RandomAgent(
-            player_id=2, num_actions=num_actions, bot=None)
-
+        # RandomAgent(
+        # player_id=1, num_actions=num_actions, bot=None),
+        #
+        # RandomAgent(
+        #     player_id=2, num_actions=num_actions, bot=None)
+        MCTSAgent(
+            player_id=0, num_actions=num_actions, mcts_bot=ismcts_bot2),
+        MCTSAgent(
+            player_id=0, num_actions=num_actions, mcts_bot=ismcts_bot2)
     ]
 
     time_step = env.reset()
@@ -149,7 +159,7 @@ def test_win_rate(n):
     plt.xlabel('max_simulations')
     plt.ylabel('win_rate')
     # plt.legend()
-    plt.title('ISMCTS on Cluedo')
+    plt.title('ISMCTS with entropy on Cluedo')
     plt.show()
 
 # cProfiler = cProfile.Profile()

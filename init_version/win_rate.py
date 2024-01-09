@@ -1,5 +1,5 @@
-from game_run import game_run
-from game_core import GameModel
+from init_version.game_run import game_run
+from init_version.game_core import GameModel
 
 
 def win_rate(n_player, n):
