@@ -23,6 +23,10 @@ import random
 
 import numpy as np
 import pyspiel
+import sys
+
+
+sys.setrecursionlimit(10000)
 
 UNLIMITED_NUM_WORLD_SAMPLES = -1
 UNEXPANDED_VISIT_COUNT = -1
@@ -52,16 +56,21 @@ class ChildInfo(object):
     self.entropy = entropy
 
   def value(self):
-    return self.return_sum / self.visits + self.entropy
-
+    if self.visits == 0:
+      return - self.entropy
+    else:
+      return self.return_sum / self.visits - self.entropy
+    # return self.return_sum / self.visits
 
 class ISMCTSNode(object):
   """Node data structure for the search tree."""
 
   def __init__(self):
     self.child_info = {}
+    self.other_child_info = {}
     self.total_visits = 0
     self.prior_map = {}
+    self.entropy = float()
 
 
 class ISMCTSBot(pyspiel.Bot):
@@ -180,14 +189,15 @@ class ISMCTSBot(pyspiel.Bot):
       assert node.total_visits > 0
       max_value = -float('inf')
       count = 0
-      for action, child in node.child_info.items():
+      for action, child in node.child_info.items() and node.other_child_info.items():
         if child.value() == max_value:
           count += 1
         elif child.value() > max_value:
           max_value = child.value()
           count = 1
+      # print(action, child.value())
       policy = [(action, 1. / count if child.value() == max_value else 0.0)
-                for action, child in node.child_info.items()]
+                for action, child in node.child_info.items()and node.other_child_info.items() ]
     policy_size = len(policy)
     legal_actions = state.legal_actions()
     if policy_size < len(legal_actions):  # do we really need this step?
@@ -304,6 +314,10 @@ class ISMCTSBot(pyspiel.Bot):
     if action not in node.child_info:
       node.child_info[action] = ChildInfo(0.0, 0.0, node.prior_map[action], 0.0)
 
+  def expand_other_node(self, node, action):
+    if action not in node.child_info:
+      node.other_child_info[action] = ChildInfo(0.0, 0.0, node.prior_map[action], 0.0)
+
   def select_action_tree_policy(self, node, legal_actions):
     if self._allow_inconsistent_action_sets:
       temp_node = self.filter_illegals(node, legal_actions)
@@ -376,21 +390,32 @@ class ISMCTSBot(pyspiel.Bot):
     else:
       chosen_action = self.check_expand(
           node, legal_actions)  # add one children at a time?
+      other_actions = copy.deepcopy(legal_actions)
+      other_actions.remove(chosen_action)
       if chosen_action != pyspiel.INVALID_ACTION:
         # check if all actions have been expanded, if not, select one?
         # if yes, ucb?
         self.expand_if_necessary(node, chosen_action)
+        for action in other_actions:
+          self.expand_other_node(node, action)
       else:
         chosen_action = self.select_action_tree_policy(node, legal_actions)
 
       assert chosen_action != pyspiel.INVALID_ACTION
 
       node.total_visits += 1
+
       node.child_info[chosen_action].visits += 1
+
+
+      for action in other_actions:
+        if action not in node.child_info:
+          node.other_child_info[action].entropy = state.child(action).entropy
       state.apply_action(chosen_action)
       returns = self.run_simulation(state)
       node.child_info[chosen_action].return_sum += returns[cur_player]
-
       node.child_info[chosen_action].entropy = state.entropy
+
+
 
       return returns

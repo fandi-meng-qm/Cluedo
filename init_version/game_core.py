@@ -44,7 +44,7 @@ class GameState:
         if curr_player != player:
             # print(action & self.cards_dice[curr_player])
             show_card = random_choose(action & self.cards_dice[curr_player])
-            print('player'+str(curr_player)+'show card'+str(show_card)+' to '+ str(player))
+            print('player '+str(curr_player)+' show card'+str(show_card)+' to '+ str(player))
             self.information_state[player][show_card][curr_player] = 1
         else:
             new_answer = action - (action & self.cards_dice[curr_player])

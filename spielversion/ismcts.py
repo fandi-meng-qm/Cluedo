@@ -23,6 +23,10 @@ import random
 
 import numpy as np
 import pyspiel
+import sys
+
+
+sys.setrecursionlimit(10000)
 
 UNLIMITED_NUM_WORLD_SAMPLES = -1
 UNEXPANDED_VISIT_COUNT = -1

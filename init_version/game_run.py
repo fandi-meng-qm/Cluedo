@@ -23,12 +23,16 @@ from random_agent import random_policy
 
 def game_run(model):
     state = model.state
+    print('0,1,2,3,4,5 are murderer cards, 6,7,8,9,10,11 are weapon cards, left are room cards')
+    print('The cards distribution is:')
+    print('(PS: 0 means the envelope and 1 means player 1...)')
+    print(state.cards_dice)
     # player = 1
     player = random.choice(state.players)
     while model.state.is_terminal() is None:
         action = random_policy(state.cards)
 
-        print('player' + str(player) + 'suggests' + str(action))
+        print('player ' + str(player) + ' suggests' + str(action))
         state.suggest(player, action)
         state.step += 1
         state.if_accuse(player)

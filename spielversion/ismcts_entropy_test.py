@@ -8,7 +8,7 @@ from cluedo_game import CluedoGame, CluedoParams
 import numpy as np
 from open_spiel.python import rl_agent
 import matplotlib.pyplot as plt
-import cProfile
+
 
 params = CluedoParams(3)
 game = CluedoGame(game_params=params)
@@ -150,7 +150,7 @@ def test_simulations(n):
 
 def test_win_rate(n):
     data = []
-    for i in range(20):
+    for i in range(10):
         return_list3 = test_simulations(n)
         data.append(return_list3)
     mean = np.mean(data, axis=0)

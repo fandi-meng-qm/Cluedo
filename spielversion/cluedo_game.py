@@ -122,7 +122,7 @@ class CluedoState(pyspiel.State):
         else:
             room_entropy = math.log2(len(unknown_cards & self.rooms))
 
-        self.entropy = -suspect_entropy - weapon_entropy - room_entropy
+        return suspect_entropy + weapon_entropy + room_entropy
 
 
     def winner(self):
@@ -212,7 +212,6 @@ class CluedoState(pyspiel.State):
         self._winner = player
 
     def _apply_action(self, action: int) -> None:
-
         if self.is_chance_node():
             if self.dice_step == 0:
                 self.cards_dice[self.params.n_players] = self.init_actions[action]
@@ -232,6 +231,7 @@ class CluedoState(pyspiel.State):
                     self.information_state[self.dice_step-1][card][self.dice_step-1] = 1
             self.dice_step += 1
         else:
+            self.entropy = self.get_state_entropy()
             self.suggest(self._curr_player, action)
             self.suggestion_step += 1
             self.if_accuse(self._curr_player)
